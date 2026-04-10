@@ -1,0 +1,110 @@
+# ==========================================
+# 项目3：长上下文扩展 + 金融领域继续预训练
+# ==========================================
+
+base_model:
+  checkpoint_path: "main_model/final.pt"
+  tokenizer_path: "tokenizer/tokenizer.model"
+  # 与项目2主模型一致
+  n_layers: 12
+  hidden_size: 768
+  n_heads: 12
+  head_dim: 64
+  intermediate_size: 2048
+  vocab_size: 50000
+  max_seq_len: 2048       # 原始训练长度
+  dropout: 0.0
+  weight_tying: true
+  rope_theta: 10000.0
+
+general_data:
+  decontaminated_zh: "data/decontaminated/zh"
+  decontaminated_en: "data/decontaminated/en"
+  # 项目2最优mix的验证集（用于检测遗忘）
+  general_valid_bin: "data/mixtures/mix_b/valid.bin"
+  general_valid_idx: "data/mixtures/mix_b/valid.idx"
+
+# ===== 金融领域数据 =====
+domain_data:
+  raw_dir: "data/domain/raw"
+  cleaned_dir: "data/domain/cleaned"
+  tokenized_dir: "data/domain/tokenized"
+
+# ===== 长文本筛选 =====
+long_text:
+  min_tokens: 2048                     # 筛选 >= 2048 tokens 的文档
+  output_dir: "data/general_long/tokenized"
+
+# ===== RoPE Scaling 配置 =====
+rope_scaling:
+  method: "ntk"                        # "linear" / "ntk" / "yarn"
+  # linear: 线性插值，简单但长距离衰减
+  # ntk:    NTK-aware scaling，调高 base theta，效果更好
+  # yarn:   YaRN，分段处理不同频率，最先进
+
+# ===== 长上下文扩展训练 =====
+context_extension:
+  # Curriculum: 2K → 4K → 8K 分阶段扩展
+  stages:
+    - name: "4k"
+      seq_len: 4096
+      max_steps: 400
+      learning_rate: 2.0e-5            # 低学习率（微调而非从头训练）
+      min_lr: 2.0e-6
+      warmup_steps: 40
+      micro_batch_size: 2              # 长序列需要减小 batch
+      gradient_accumulation: 16
+    - name: "8k"
+      seq_len: 8192
+      max_steps: 200
+      learning_rate: 1.0e-5
+      min_lr: 1.0e-6
+      warmup_steps: 20
+      micro_batch_size: 1              # 8K 序列 batch=1
+      gradient_accumulation: 32
+
+  use_bf16: true
+  use_activation_checkpoint: true      # 长序列开
+  grad_clip: 1.0
+  seed: 42
+
+# ===== 金融领域继续预训练 =====
+continual_pretrain:
+  seq_len: 4096                        # 用 4K 上下文做继续预训练
+  max_steps: 400
+  learning_rate: 1.0e-5                # 低学习率
+  min_lr: 1.0e-6
+  warmup_steps: 40
+  micro_batch_size: 2
+  gradient_accumulation: 16
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  use_bf16: true
+  use_activation_checkpoint: true
+  seed: 42
+
+  eval_interval: 100
+  save_interval: 200
+  log_interval: 10
+
+# ===== W&B =====
+wandb:
+  enabled: true
+  project: "long-context-pretrain"
+  entity: linvana098-none
+
+# ===== 输出路径 =====
+output:
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+  report_dir: "reports"
+
+# ===== 金融研报清洗规则 =====
+domain_cleaning:
+  min_length: 200                      # 最少 200 字符
+  max_length: 500000
+  remove_headers: true
+  remove_tables: true
+  remove_disclaimers: true
