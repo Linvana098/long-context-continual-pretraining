@@ -87,12 +87,6 @@ def compute_rope_frequencies_yarn(
     """
     YaRN (Yet another RoPE extensioN)。
 
-    分段策略：
-    - 高频维度（i 小，θ_i 大）：这些维度的旋转周期短，
-      在原始训练长度内已经转了很多圈，外推时不会出问题 → 不缩放
-    - 低频维度（i 大，θ_i 小）：旋转周期长，
-      原始长度内可能不到一圈，外推时角度超出分布 → 做线性插值
-
     通过 ramp 函数在高频和低频之间平滑过渡。
 
     beta_fast: 高频边界（周期 < 2π/beta_fast 的维度不缩放）
